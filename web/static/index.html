@@ -396,8 +396,8 @@
                 <input type="text" id="target-host" class="form-control bg-dark text-light border-secondary" placeholder="192.168.1.100 или google.com" required>
               </div>
               <div class="col-4">
-                <label class="form-label small fw-semibold">Порт <span class="text-danger">*</span></label>
-                <input type="number" id="target-port" class="form-control bg-dark text-light border-secondary" placeholder="80" min="1" max="65535" required>
+                <label class="form-label small fw-semibold">Порт <span class="text-secondary fw-normal">(опц.)</span></label>
+                <input type="number" id="target-port" class="form-control bg-dark text-light border-secondary" placeholder="Пусто = ICMP пинг" min="0" max="65535">
               </div>
             </div>
             <div class="row g-2">
@@ -576,6 +576,13 @@
           infoCol = `<span class="text-secondary small">Ожидание проверки</span>`;
         }
 
+        let addrCol = '';
+        if (t.port > 0) {
+          addrCol = `<code class="text-info fs-6">${escapeHtml(t.host)}:${t.port}</code> <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" style="font-size: 0.65rem;">TCP</span>`;
+        } else {
+          addrCol = `<code class="text-info fs-6">${escapeHtml(t.host)}</code> <span class="badge bg-info-subtle text-info border border-info-subtle" style="font-size: 0.65rem;"><i class="bi bi-activity me-1"></i>PING</span>`;
+        }
+
         return `
           <tr>
             <td>${statusBadge}</td>
@@ -583,7 +590,7 @@
               <div class="fw-semibold text-light">${escapeHtml(t.name || t.host)}</div>
             </td>
             <td>
-              <code class="text-info fs-6">${escapeHtml(t.host)}:${t.port}</code>
+              ${addrCol}
             </td>
             <td>${latencyBadge}</td>
             <td><span class="badge bg-dark border border-secondary">${t.interval}с</span></td>
@@ -661,7 +668,7 @@
       document.getElementById('target-id').value = t.id;
       document.getElementById('target-name').value = t.name || '';
       document.getElementById('target-host').value = t.host;
-      document.getElementById('target-port').value = t.port;
+      document.getElementById('target-port').value = t.port > 0 ? t.port : '';
       document.getElementById('target-interval').value = t.interval;
       document.getElementById('target-timeout').value = t.timeout;
       addModalInstance.show();
@@ -670,10 +677,13 @@
     async function saveTarget(e) {
       e.preventDefault();
       const id = document.getElementById('target-id').value;
+      const portRaw = document.getElementById('target-port').value.trim();
+      const portVal = portRaw === '' ? 0 : parseInt(portRaw, 10);
+
       const payload = {
         name: document.getElementById('target-name').value,
         host: document.getElementById('target-host').value,
-        port: parseInt(document.getElementById('target-port').value, 10),
+        port: isNaN(portVal) ? 0 : portVal,
         interval: parseInt(document.getElementById('target-interval').value, 10),
         timeout: parseInt(document.getElementById('target-timeout').value, 10)
       };

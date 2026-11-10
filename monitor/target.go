@@ -147,7 +147,7 @@ func (s *Store) loadLocked() error {
 			continue
 		}
 
-		// Format: "IP:PORT описание"
+		// Format: "IP:PORT описание" or "IP описание" (if no port, ping only)
 		var addrPart, descPart string
 		idx := strings.IndexAny(line, " \t")
 		if idx == -1 {
@@ -158,22 +158,47 @@ func (s *Store) loadLocked() error {
 			descPart = strings.TrimSpace(line[idx+1:])
 		}
 
-		host, portStr, err := net.SplitHostPort(addrPart)
-		if err != nil {
-			lastColon := strings.LastIndex(addrPart, ":")
-			if lastColon > 0 {
-				host = addrPart[:lastColon]
-				portStr = addrPart[lastColon+1:]
-			} else {
-				logger.Warn("Skipping invalid target at line %d: %s", lineNum, line)
-				continue
-			}
-		}
+		var host string
+		var port int
 
-		port, err := strconv.Atoi(portStr)
-		if err != nil || port <= 0 || port > 65535 {
-			logger.Warn("Invalid port at line %d in %s: %s", lineNum, s.filePath, line)
-			continue
+		if strings.HasPrefix(addrPart, "[") {
+			// IPv6 e.g. [::1]:80 or [::1]
+			h, portStr, err := net.SplitHostPort(addrPart)
+			if err == nil {
+				host = h
+				p, _ := strconv.Atoi(portStr)
+				port = p
+			} else {
+				host = strings.Trim(addrPart, "[]")
+				port = 0
+			}
+		} else if strings.Count(addrPart, ":") == 1 {
+			// Host with port, e.g. 192.168.1.1:80
+			h, portStr, err := net.SplitHostPort(addrPart)
+			if err == nil {
+				p, err := strconv.Atoi(portStr)
+				if err == nil && p > 0 && p <= 65535 {
+					host = h
+					port = p
+				} else {
+					host = addrPart
+					port = 0
+				}
+			} else {
+				parts := strings.Split(addrPart, ":")
+				p, err := strconv.Atoi(parts[1])
+				if err == nil && p > 0 && p <= 65535 {
+					host = parts[0]
+					port = p
+				} else {
+					host = addrPart
+					port = 0
+				}
+			}
+		} else {
+			// No port specified: pure IP or hostname
+			host = addrPart
+			port = 0
 		}
 
 		key := fmt.Sprintf("%s:%d", strings.ToLower(host), port)
@@ -186,7 +211,11 @@ func (s *Store) loadLocked() error {
 		} else {
 			name := descPart
 			if name == "" {
-				name = fmt.Sprintf("%s:%d", host, port)
+				if port > 0 {
+					name = fmt.Sprintf("%s:%d", host, port)
+				} else {
+					name = host
+				}
 			}
 			target = &Target{
 				ID:        generateID(),
@@ -224,7 +253,7 @@ func (s *Store) Save() error {
 func (s *Store) saveLocked() error {
 	var buf bytes.Buffer
 	buf.WriteString("# NetCheck Targets\n")
-	buf.WriteString("# Формат: IP:PORT Описание\n\n")
+	buf.WriteString("# Формат: IP:PORT Описание (или IP Описание для ICMP-пинга)\n\n")
 
 	for _, id := range s.order {
 		t, ok := s.targets[id]
@@ -232,12 +261,19 @@ func (s *Store) saveLocked() error {
 			continue
 		}
 		desc := strings.TrimSpace(t.Name)
-		defaultName := fmt.Sprintf("%s:%d", t.Host, t.Port)
+		var addrStr, defaultName string
+		if t.Port > 0 {
+			addrStr = fmt.Sprintf("%s:%d", t.Host, t.Port)
+			defaultName = addrStr
+		} else {
+			addrStr = t.Host
+			defaultName = addrStr
+		}
 
 		if desc != "" && desc != defaultName {
-			buf.WriteString(fmt.Sprintf("%s:%d %s\n", t.Host, t.Port, desc))
+			buf.WriteString(fmt.Sprintf("%s %s\n", addrStr, desc))
 		} else {
-			buf.WriteString(fmt.Sprintf("%s:%d\n", t.Host, t.Port))
+			buf.WriteString(fmt.Sprintf("%s\n", addrStr))
 		}
 	}
 
@@ -287,7 +323,7 @@ func (s *Store) Add(target *Target) error {
 	target.Host = strings.TrimSpace(target.Host)
 	target.Name = strings.TrimSpace(target.Name)
 
-	if target.Host == "" || target.Port <= 0 || target.Port > 65535 {
+	if target.Host == "" || target.Port < 0 || target.Port > 65535 {
 		return fmt.Errorf("invalid host or port")
 	}
 
@@ -295,7 +331,10 @@ func (s *Store) Add(target *Target) error {
 	key := fmt.Sprintf("%s:%d", strings.ToLower(target.Host), target.Port)
 	for _, existing := range s.targets {
 		if fmt.Sprintf("%s:%d", strings.ToLower(existing.Host), existing.Port) == key {
-			return fmt.Errorf("target %s:%d already exists", target.Host, target.Port)
+			if target.Port > 0 {
+				return fmt.Errorf("target %s:%d already exists", target.Host, target.Port)
+			}
+			return fmt.Errorf("target %s already exists", target.Host)
 		}
 	}
 
@@ -306,7 +345,11 @@ func (s *Store) Add(target *Target) error {
 		target.Timeout = 5
 	}
 	if target.Name == "" {
-		target.Name = fmt.Sprintf("%s:%d", target.Host, target.Port)
+		if target.Port > 0 {
+			target.Name = fmt.Sprintf("%s:%d", target.Host, target.Port)
+		} else {
+			target.Name = target.Host
+		}
 	}
 
 	target.ID = generateID()

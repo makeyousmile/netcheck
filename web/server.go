@@ -128,8 +128,8 @@ func (s *Server) handleTargets(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusBadRequest, "Host/IP is required")
 			return
 		}
-		if req.Port <= 0 || req.Port > 65535 {
-			jsonError(w, http.StatusBadRequest, "Port must be between 1 and 65535")
+		if req.Port < 0 || req.Port > 65535 {
+			jsonError(w, http.StatusBadRequest, "Port must be between 0 and 65535")
 			return
 		}
 
@@ -141,7 +141,11 @@ func (s *Server) handleTargets(w http.ResponseWriter, r *http.Request) {
 			req.Timeout = cfg.DefaultTimeout
 		}
 		if req.Name == "" {
-			req.Name = fmt.Sprintf("%s:%d", req.Host, req.Port)
+			if req.Port > 0 {
+				req.Name = fmt.Sprintf("%s:%d", req.Host, req.Port)
+			} else {
+				req.Name = req.Host
+			}
 		}
 
 		target := &monitor.Target{
@@ -157,7 +161,11 @@ func (s *Server) handleTargets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		logger.Info("Added new target [%s] %s:%d (Interval: %ds, Timeout: %ds)", target.Name, target.Host, target.Port, target.Interval, target.Timeout)
+		if target.Port > 0 {
+			logger.Info("Added new target [%s] %s:%d (Interval: %ds, Timeout: %ds)", target.Name, target.Host, target.Port, target.Interval, target.Timeout)
+		} else {
+			logger.Info("Added new target [%s] %s (ICMP Ping, Interval: %ds, Timeout: %ds)", target.Name, target.Host, target.Interval, target.Timeout)
+		}
 		go s.checker.CheckTarget(target.ID)
 		jsonResponse(w, http.StatusCreated, target)
 
@@ -250,9 +258,16 @@ func (s *Server) handleTargetByID(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusBadRequest, "Host/IP is required")
 			return
 		}
-		if req.Port <= 0 || req.Port > 65535 {
-			jsonError(w, http.StatusBadRequest, "Port must be between 1 and 65535")
+		if req.Port < 0 || req.Port > 65535 {
+			jsonError(w, http.StatusBadRequest, "Port must be between 0 and 65535")
 			return
+		}
+		if req.Name == "" {
+			if req.Port > 0 {
+				req.Name = fmt.Sprintf("%s:%d", req.Host, req.Port)
+			} else {
+				req.Name = req.Host
+			}
 		}
 		if req.Interval <= 0 {
 			req.Interval = 15

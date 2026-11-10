@@ -3,8 +3,13 @@ package monitor
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
+	"os/exec"
+	"regexp"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -112,18 +117,32 @@ func (c *Checker) CheckTarget(id string) {
 	}
 	timeout := time.Duration(timeoutSec) * time.Second
 
-	address := net.JoinHostPort(target.Host, strconv.Itoa(target.Port))
-	startTime := time.Now()
+	var latencyMs int64
+	var checkErr error
+	var address string
 
-	conn, dialErr := net.DialTimeout("tcp", address, timeout)
-	latency := time.Since(startTime)
-	latencyMs := latency.Milliseconds()
+	if target.Port > 0 {
+		address = net.JoinHostPort(target.Host, strconv.Itoa(target.Port))
+		startTime := time.Now()
+		conn, dialErr := net.DialTimeout("tcp", address, timeout)
+		latency := time.Since(startTime)
+		latencyMs = latency.Milliseconds()
+		if dialErr != nil {
+			checkErr = dialErr
+		} else {
+			_ = conn.Close()
+		}
+	} else {
+		address = fmt.Sprintf("%s (ICMP Ping)", target.Host)
+		lat, pingErr := pingHost(c.ctx, target.Host, timeout)
+		latencyMs = lat
+		checkErr = pingErr
+	}
+
 	now := time.Now()
-
 	cfg := c.cfgManager.Get()
 
-	if dialErr == nil {
-		_ = conn.Close()
+	if checkErr == nil {
 		// SUCCESS
 		var needRecoveryAlert bool
 		var downtime time.Duration
@@ -159,7 +178,7 @@ func (c *Checker) CheckTarget(id string) {
 
 	} else {
 		// FAILURE
-		errMsg := dialErr.Error()
+		errMsg := checkErr.Error()
 		var sendAlert bool
 
 		_, _ = c.store.Update(id, func(t *Target) {
@@ -198,4 +217,58 @@ func (c *Checker) CheckNow(id string) error {
 	}
 	go c.CheckTarget(target.ID)
 	return nil
+}
+
+func pingHost(ctx context.Context, host string, timeout time.Duration) (int64, error) {
+	timeoutSec := int(timeout.Seconds())
+	if timeoutSec <= 0 {
+		timeoutSec = 2
+	}
+
+	start := time.Now()
+	var cmd *exec.Cmd
+
+	if runtime.GOOS == "windows" {
+		timeoutMs := timeoutSec * 1000
+		cmd = exec.CommandContext(ctx, "ping", "-n", "1", "-w", strconv.Itoa(timeoutMs), host)
+	} else if runtime.GOOS == "darwin" {
+		cmd = exec.CommandContext(ctx, "ping", "-c", "1", "-t", strconv.Itoa(timeoutSec), host)
+	} else {
+		cmd = exec.CommandContext(ctx, "ping", "-c", "1", "-W", strconv.Itoa(timeoutSec), host)
+	}
+
+	out, err := cmd.CombinedOutput()
+	latency := time.Since(start).Milliseconds()
+
+	if err != nil {
+		outStr := strings.TrimSpace(string(out))
+		if outStr != "" {
+			lines := strings.Split(outStr, "\n")
+			for i := len(lines) - 1; i >= 0; i-- {
+				l := strings.TrimSpace(lines[i])
+				if l != "" {
+					return 0, fmt.Errorf("ping: %s", l)
+				}
+			}
+		}
+		return 0, fmt.Errorf("ping %s timed out or host unreachable", host)
+	}
+
+	rtt := parsePingLatency(string(out))
+	if rtt > 0 {
+		return rtt, nil
+	}
+	return latency, nil
+}
+
+func parsePingLatency(output string) int64 {
+	re := regexp.MustCompile(`time[=<]([0-9.]+)\s*ms`)
+	matches := re.FindStringSubmatch(output)
+	if len(matches) > 1 {
+		val, err := strconv.ParseFloat(matches[1], 64)
+		if err == nil {
+			return int64(math.Round(val))
+		}
+	}
+	return 0
 }

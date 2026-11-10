@@ -181,11 +181,12 @@ func TestStoreLineFormat(t *testing.T) {
 
 	filePath := filepath.Join(tempDir, "targets.txt")
 
-	// Pre-create file with format: IP:PORT описание
+	// Pre-create file with format: IP:PORT описание or IP описание (ping)
 	initialContent := `# Тестовые цели
 192.168.1.1:80 Веб сервер
 10.0.0.5:5432 База данных
 8.8.8.8:53
+127.0.0.1 Локальный пинг
 `
 	if err := os.WriteFile(filePath, []byte(initialContent), 0644); err != nil {
 		t.Fatal(err)
@@ -197,8 +198,8 @@ func TestStoreLineFormat(t *testing.T) {
 	}
 
 	targets := store.GetAll()
-	if len(targets) != 3 {
-		t.Fatalf("Expected 3 targets, got %d", len(targets))
+	if len(targets) != 4 {
+		t.Fatalf("Expected 4 targets, got %d", len(targets))
 	}
 
 	if targets[0].Host != "192.168.1.1" || targets[0].Port != 80 || targets[0].Name != "Веб сервер" {
@@ -210,18 +211,21 @@ func TestStoreLineFormat(t *testing.T) {
 	if targets[2].Host != "8.8.8.8" || targets[2].Port != 53 {
 		t.Fatalf("Target 2 mismatch: %+v", targets[2])
 	}
+	if targets[3].Host != "127.0.0.1" || targets[3].Port != 0 || targets[3].Name != "Локальный пинг" {
+		t.Fatalf("Target 3 (ping) mismatch: %+v", targets[3])
+	}
 
-	// Add a new target
+	// Add a new target with Port = 0 (ping)
 	err = store.Add(&Target{
-		Host: "1.1.1.1",
-		Port: 53,
-		Name: "Cloudflare DNS",
+		Host: "8.8.4.4",
+		Port: 0,
+		Name: "Google DNS Secondary",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Read raw file and verify exact format: IP:PORT описание
+	// Read raw file and verify exact format
 	raw, err := store.ReadRawFile()
 	if err != nil {
 		t.Fatal(err)
@@ -230,7 +234,17 @@ func TestStoreLineFormat(t *testing.T) {
 	if !strings.Contains(raw, "192.168.1.1:80 Веб сервер") {
 		t.Fatalf("File does not contain expected line: %s", raw)
 	}
-	if !strings.Contains(raw, "1.1.1.1:53 Cloudflare DNS") {
-		t.Fatalf("File does not contain newly added line: %s", raw)
+	if !strings.Contains(raw, "8.8.4.4 Google DNS Secondary") {
+		t.Fatalf("File does not contain newly added ping line: %s", raw)
+	}
+
+	// Test Ping Checker on 127.0.0.1
+	cfgMgr, _ := config.NewManager(filepath.Join(tempDir, "config.json"))
+	checker := NewChecker(store, cfgMgr, &MockNotifier{})
+	checker.CheckTarget(targets[3].ID)
+
+	updatedTarget, _ := store.Get(targets[3].ID)
+	if updatedTarget.Status != "UP" {
+		t.Fatalf("Expected 127.0.0.1 ping to be UP, got %s (err: %s)", updatedTarget.Status, updatedTarget.LastError)
 	}
 }

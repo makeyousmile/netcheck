@@ -97,16 +97,22 @@ func (t *TelegramNotifier) SendAlert(name, host string, port int, lastError stri
 		nameStr = fmt.Sprintf("<b>Название:</b> %s\n", html.EscapeString(name))
 	}
 
+	addrDisplay := host
+	if port > 0 {
+		addrDisplay = fmt.Sprintf("%s:%d (TCP)", host, port)
+	} else {
+		addrDisplay = fmt.Sprintf("%s (ICMP Ping)", host)
+	}
+
 	text := fmt.Sprintf(
 		"🚨 <b>Внимание! Потеряно соединение с хостом</b>\n\n"+
 			"%s"+
-			"<b>Адрес:</b> <code>%s:%d</code>\n"+
+			"<b>Адрес:</b> <code>%s</code>\n"+
 			"<b>Статус:</b> 🔴 НЕДОСТУПЕН (DOWN)\n"+
 			"<b>Время:</b> %s\n"+
 			"<b>Ошибка:</b> <code>%s</code>\n",
 		nameStr,
-		html.EscapeString(host),
-		port,
+		html.EscapeString(addrDisplay),
 		now,
 		html.EscapeString(lastError),
 	)
@@ -124,6 +130,13 @@ func (t *TelegramNotifier) SendRecovery(name, host string, port int, downtime ti
 		nameStr = fmt.Sprintf("<b>Название:</b> %s\n", html.EscapeString(name))
 	}
 
+	addrDisplay := host
+	if port > 0 {
+		addrDisplay = fmt.Sprintf("%s:%d (TCP)", host, port)
+	} else {
+		addrDisplay = fmt.Sprintf("%s (ICMP Ping)", host)
+	}
+
 	downtimeStr := ""
 	if downtime > 0 {
 		downtimeStr = fmt.Sprintf("<b>Время простоя:</b> %s\n", downtime.Round(time.Second).String())
@@ -132,13 +145,12 @@ func (t *TelegramNotifier) SendRecovery(name, host string, port int, downtime ti
 	text := fmt.Sprintf(
 		"✅ <b>Связь восстановлена!</b>\n\n"+
 			"%s"+
-			"<b>Адрес:</b> <code>%s:%d</code>\n"+
+			"<b>Адрес:</b> <code>%s</code>\n"+
 			"<b>Статус:</b> 🟢 ДОСТУПЕН (UP)\n"+
 			"<b>Время:</b> %s\n"+
 			"%s",
 		nameStr,
-		html.EscapeString(host),
-		port,
+		html.EscapeString(addrDisplay),
 		now,
 		downtimeStr,
 	)
