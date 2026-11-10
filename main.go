@@ -73,7 +73,7 @@ func main() {
 	)
 
 	// Initialize Store
-	targetsPath := filepath.Join(dataDir, "targets.json")
+	targetsPath := filepath.Join(dataDir, "targets.txt")
 	store, err := monitor.NewStore(targetsPath)
 	if err != nil {
 		logger.Error("Failed to initialize targets store: %v", err)

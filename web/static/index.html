@@ -232,9 +232,14 @@
             <div class="d-flex gap-2 align-items-center">
               <input type="text" id="search-input" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="Поиск по IP / имени..." style="width: 250px;">
             </div>
-            <button class="btn btn-primary btn-sm d-flex align-items-center gap-1" onclick="openAddTargetModal()">
-              <i class="bi bi-plus-lg"></i> Добавить цель
-            </button>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline-info btn-sm d-flex align-items-center gap-1" onclick="openFileEditorModal()">
+                <i class="bi bi-file-earmark-text"></i> Файл targets.txt
+              </button>
+              <button class="btn btn-primary btn-sm d-flex align-items-center gap-1" onclick="openAddTargetModal()">
+                <i class="bi bi-plus-lg"></i> Добавить цель
+              </button>
+            </div>
           </div>
 
           <div class="table-responsive">
@@ -415,6 +420,32 @@
     </div>
   </div>
 
+  <!-- Modal: Edit targets.txt file -->
+  <div class="modal fade" id="fileEditorModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content bg-dark text-light border-secondary">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title"><i class="bi bi-file-earmark-text me-2"></i>Файл targets.txt</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form onsubmit="saveTargetsFile(event)">
+          <div class="modal-body">
+            <p class="text-secondary small mb-2">
+              Каждая строка имеет формат: <code>IP:PORT описание</code><br>
+              Строки, начинающиеся с <code>#</code>, считаются комментариями.
+            </p>
+            <div class="small text-info mb-2" id="file-path-indicator">Файл: data/targets.txt</div>
+            <textarea id="file-editor-content" class="form-control bg-dark text-light border-secondary font-monospace" rows="12" style="font-size: 0.88rem; white-space: pre;"></textarea>
+          </div>
+          <div class="modal-footer border-secondary">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+            <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1080;">
     <div id="liveToast" class="toast align-items-center text-bg-dark border-secondary" role="alert" aria-live="assertive" aria-atomic="true">
@@ -429,10 +460,12 @@
   <script>
     let targets = [];
     let addModalInstance = null;
+    let fileModalInstance = null;
     let toastInstance = null;
 
     document.addEventListener("DOMContentLoaded", () => {
       addModalInstance = new bootstrap.Modal(document.getElementById('addTargetModal'));
+      fileModalInstance = new bootstrap.Modal(document.getElementById('fileEditorModal'));
       toastInstance = new bootstrap.Toast(document.getElementById('liveToast'), { delay: 3500 });
 
       fetchStats();
@@ -586,6 +619,39 @@
       document.getElementById('target-interval').value = '15';
       document.getElementById('target-timeout').value = '5';
       addModalInstance.show();
+    }
+
+    async function openFileEditorModal() {
+      try {
+        const res = await fetch('/api/targets-file');
+        if (!res.ok) throw new Error('Не удалось прочитать файл');
+        const data = await res.json();
+        document.getElementById('file-editor-content').value = data.content || '';
+        document.getElementById('file-path-indicator').innerText = 'Файл: ' + (data.path || 'data/targets.txt');
+        fileModalInstance.show();
+      } catch (e) {
+        showToast('Ошибка загрузки: ' + e.message, true);
+      }
+    }
+
+    async function saveTargetsFile(e) {
+      e.preventDefault();
+      const content = document.getElementById('file-editor-content').value;
+      try {
+        const res = await fetch('/api/targets-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Ошибка при сохранении файла');
+        fileModalInstance.hide();
+        showToast('Файл targets.txt сохранен, цели обновлены!');
+        fetchTargets();
+        fetchStats();
+      } catch (err) {
+        showToast(err.message, true);
+      }
     }
 
     function openEditTargetModal(id) {

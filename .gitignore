@@ -15,5 +15,6 @@ Thumbs.db
 data/*.log
 data/config.json
 data/targets.json
+data/targets.txt
 data/*.tmp
 !data/.gitkeep

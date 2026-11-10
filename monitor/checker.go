@@ -66,6 +66,7 @@ func (c *Checker) loop() {
 }
 
 func (c *Checker) checkAllDue() {
+	c.store.ReloadIfChanged()
 	targets := c.store.GetAll()
 	now := time.Now()
 

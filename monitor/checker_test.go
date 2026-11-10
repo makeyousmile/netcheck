@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -53,7 +54,7 @@ func TestCheckerTransitionAndTelegramAlert(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	targetsPath := filepath.Join(tempDir, "targets.json")
+	targetsPath := filepath.Join(tempDir, "targets.txt")
 	store, err := NewStore(targetsPath)
 	if err != nil {
 		t.Fatal(err)
@@ -169,4 +170,67 @@ func TestCheckerTransitionAndTelegramAlert(t *testing.T) {
 		t.Fatalf("Expected 1 recovery alert, got %d", mockNotif.recoverCount)
 	}
 	mockNotif.mu.Unlock()
+}
+
+func TestStoreLineFormat(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "netcheck-lineformat-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	filePath := filepath.Join(tempDir, "targets.txt")
+
+	// Pre-create file with format: IP:PORT описание
+	initialContent := `# Тестовые цели
+192.168.1.1:80 Веб сервер
+10.0.0.5:5432 База данных
+8.8.8.8:53
+`
+	if err := os.WriteFile(filePath, []byte(initialContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := NewStore(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	targets := store.GetAll()
+	if len(targets) != 3 {
+		t.Fatalf("Expected 3 targets, got %d", len(targets))
+	}
+
+	if targets[0].Host != "192.168.1.1" || targets[0].Port != 80 || targets[0].Name != "Веб сервер" {
+		t.Fatalf("Target 0 mismatch: %+v", targets[0])
+	}
+	if targets[1].Host != "10.0.0.5" || targets[1].Port != 5432 || targets[1].Name != "База данных" {
+		t.Fatalf("Target 1 mismatch: %+v", targets[1])
+	}
+	if targets[2].Host != "8.8.8.8" || targets[2].Port != 53 {
+		t.Fatalf("Target 2 mismatch: %+v", targets[2])
+	}
+
+	// Add a new target
+	err = store.Add(&Target{
+		Host: "1.1.1.1",
+		Port: 53,
+		Name: "Cloudflare DNS",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read raw file and verify exact format: IP:PORT описание
+	raw, err := store.ReadRawFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(raw, "192.168.1.1:80 Веб сервер") {
+		t.Fatalf("File does not contain expected line: %s", raw)
+	}
+	if !strings.Contains(raw, "1.1.1.1:53 Cloudflare DNS") {
+		t.Fatalf("File does not contain newly added line: %s", raw)
+	}
 }

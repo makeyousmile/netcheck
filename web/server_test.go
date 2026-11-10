@@ -36,7 +36,7 @@ func TestWebAPI(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	cfgMgr, _ := config.NewManager(filepath.Join(tempDir, "config.json"))
-	store, _ := monitor.NewStore(filepath.Join(tempDir, "targets.json"))
+	store, _ := monitor.NewStore(filepath.Join(tempDir, "targets.txt"))
 	notif := &MockNotifier{}
 	checker := monitor.NewChecker(store, cfgMgr, notif)
 	server := NewServer(cfgMgr, store, checker, notif)

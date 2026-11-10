@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -52,6 +53,7 @@ func (s *Server) Start() error {
 	// API routes
 	mux.HandleFunc("/api/targets", s.handleTargets)
 	mux.HandleFunc("/api/targets/", s.handleTargetByID)
+	mux.HandleFunc("/api/targets-file", s.handleTargetsFile)
 	mux.HandleFunc("/api/settings", s.handleSettings)
 	mux.HandleFunc("/api/test-telegram", s.handleTestTelegram)
 	mux.HandleFunc("/api/logs", s.handleLogs)
@@ -446,6 +448,42 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleTargetsFile(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		content, err := s.store.ReadRawFile()
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		jsonResponse(w, http.StatusOK, map[string]string{
+			"path":    s.store.FilePath(),
+			"content": content,
+		})
+
+	case http.MethodPost:
+		var req struct {
+			Content string `json:"content"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonError(w, http.StatusBadRequest, "Invalid JSON body")
+			return
+		}
+
+		if err := os.WriteFile(s.store.FilePath(), []byte(req.Content), 0644); err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		s.store.ReloadIfChanged()
+		logger.Info("targets.txt updated via Web UI (%d targets loaded)", len(s.store.GetAll()))
+		jsonResponse(w, http.StatusOK, map[string]string{"status": "targets file updated"})
+
+	default:
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	}
 }
 
 func ParseIntParam(r *http.Request, key string, fallback int) int {
