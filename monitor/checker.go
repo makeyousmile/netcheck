@@ -225,7 +225,6 @@ func pingHost(ctx context.Context, host string, timeout time.Duration) (int64, e
 		timeoutSec = 2
 	}
 
-	start := time.Now()
 	var cmd *exec.Cmd
 
 	if runtime.GOOS == "windows" {
@@ -238,12 +237,12 @@ func pingHost(ctx context.Context, host string, timeout time.Duration) (int64, e
 	}
 
 	out, err := cmd.CombinedOutput()
-	latency := time.Since(start).Milliseconds()
+	outStr := string(out)
 
 	if err != nil {
-		outStr := strings.TrimSpace(string(out))
-		if outStr != "" {
-			lines := strings.Split(outStr, "\n")
+		trimmed := strings.TrimSpace(outStr)
+		if trimmed != "" {
+			lines := strings.Split(trimmed, "\n")
 			for i := len(lines) - 1; i >= 0; i-- {
 				l := strings.TrimSpace(lines[i])
 				if l != "" {
@@ -254,21 +253,25 @@ func pingHost(ctx context.Context, host string, timeout time.Duration) (int64, e
 		return 0, fmt.Errorf("ping %s timed out or host unreachable", host)
 	}
 
-	rtt := parsePingLatency(string(out))
-	if rtt > 0 {
-		return rtt, nil
-	}
-	return latency, nil
+	// Always strictly parse latency from ping output - no fallback
+	return parsePingLatency(outStr)
 }
 
-func parsePingLatency(output string) int64 {
-	re := regexp.MustCompile(`time[=<]([0-9.]+)\s*ms`)
-	matches := re.FindStringSubmatch(output)
-	if len(matches) > 1 {
-		val, err := strconv.ParseFloat(matches[1], 64)
-		if err == nil {
-			return int64(math.Round(val))
+var pingTimeRegexes = []*regexp.Regexp{
+	regexp.MustCompile(`time[=<]([0-9.]+)\s*ms`),
+	regexp.MustCompile(`rtt min/avg/max/mdev = [0-9.]+/([0-9.]+)/`),
+	regexp.MustCompile(`Average = ([0-9.]+)ms`),
+}
+
+func parsePingLatency(output string) (int64, error) {
+	for _, re := range pingTimeRegexes {
+		matches := re.FindStringSubmatch(output)
+		if len(matches) > 1 {
+			val, err := strconv.ParseFloat(matches[1], 64)
+			if err == nil {
+				return int64(math.Round(val)), nil
+			}
 		}
 	}
-	return 0
+	return 0, fmt.Errorf("could not parse ping latency from utility output")
 }

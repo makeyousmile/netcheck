@@ -248,3 +248,67 @@ func TestStoreLineFormat(t *testing.T) {
 		t.Fatalf("Expected 127.0.0.1 ping to be UP, got %s (err: %s)", updatedTarget.Status, updatedTarget.LastError)
 	}
 }
+
+func TestParsePingLatencyStrict(t *testing.T) {
+	tests := []struct {
+		name        string
+		output      string
+		expectedMs  int64
+		expectError bool
+	}{
+		{
+			name:        "Linux standard output",
+			output:      "64 bytes from 8.8.8.8: icmp_seq=1 ttl=120 time=8.53 ms\n--- 8.8.8.8 ping statistics ---",
+			expectedMs:  9,
+			expectError: false,
+		},
+		{
+			name:        "Localhost sub-millisecond",
+			output:      "64 bytes from 127.0.0.1: icmp_seq=1 ttl=64 time=0.158 ms",
+			expectedMs:  0,
+			expectError: false,
+		},
+		{
+			name:        "Windows output",
+			output:      "Reply from 8.8.8.8: bytes=32 time=14ms TTL=118",
+			expectedMs:  14,
+			expectError: false,
+		},
+		{
+			name:        "Linux summary rtt",
+			output:      "1 packets transmitted, 1 received\nrtt min/avg/max/mdev = 12.345/15.678/20.100/1.234 ms",
+			expectedMs:  16,
+			expectError: false,
+		},
+		{
+			name:        "Missing ping time (failure)",
+			output:      "1 packets transmitted, 0 received, 100% packet loss",
+			expectedMs:  0,
+			expectError: true,
+		},
+		{
+			name:        "Host unreachable message",
+			output:      "Destination Host Unreachable",
+			expectedMs:  0,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, err := parsePingLatency(tt.output)
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("Expected error for output %q, got nil with value %d", tt.output, val)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Unexpected error for output %q: %v", tt.output, err)
+				}
+				if val != tt.expectedMs {
+					t.Fatalf("Expected %d ms, got %d ms", tt.expectedMs, val)
+				}
+			}
+		})
+	}
+}
