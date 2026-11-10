@@ -258,9 +258,19 @@ func pingHost(ctx context.Context, host string, timeout time.Duration) (int64, e
 }
 
 var pingTimeRegexes = []*regexp.Regexp{
-	regexp.MustCompile(`time[=<]([0-9.]+)\s*ms`),
+	// 1. Linux/macOS/English Windows: "time=8.38 ms" or "time=14ms" or "time<1ms"
+	regexp.MustCompile(`(?i)\btime[=<]\s*([0-9.]+)\s*ms`),
+	// 2. Linux RTT summary: "rtt min/avg/max/mdev = 8.529/8.529/..."
 	regexp.MustCompile(`rtt min/avg/max/mdev = [0-9.]+/([0-9.]+)/`),
-	regexp.MustCompile(`Average = ([0-9.]+)ms`),
+	// 3. UTF-8 Russian/European Windows: "время=14мс", "время<1мс", "zeit=12ms", "temps=10ms"
+	regexp.MustCompile(`(?i)(?:время|zeit|temps|tiempo)[=<]\s*([0-9.]+)\s*(?:ms|мс|msec|мсек)?`),
+	// 4. Windows in ANY encoding (CP866, CP1251, UTF-8, etc.):
+	// In Windows replies, time is always directly before TTL= (e.g. "... время=14мс TTL=118" or "... time<1ms TTL=118")
+	regexp.MustCompile(`(?i)[=<]\s*([0-9.]+)[^0-9\r\n]*TTL[=\s]`),
+	// 5. Windows summary: "Average = 14ms" or "Среднее = 14мс"
+	regexp.MustCompile(`(?i)(?:average|среднее)[^0-9\r\n]*=\s*([0-9.]+)\s*(?:ms|мс|msec|мсек)?`),
+	// 6. Generic fallback: "=14ms" or "=14мс" or "<1ms" or "<1мс"
+	regexp.MustCompile(`[=<]\s*([0-9.]+)\s*(?:ms|мс|msec|мсек)`),
 }
 
 func parsePingLatency(output string) (int64, error) {

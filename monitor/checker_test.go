@@ -269,9 +269,51 @@ func TestParsePingLatencyStrict(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "Windows output",
+			name:        "Windows English output",
 			output:      "Reply from 8.8.8.8: bytes=32 time=14ms TTL=118",
 			expectedMs:  14,
+			expectError: false,
+		},
+		{
+			name:        "Windows English under 1ms",
+			output:      "Reply from 127.0.0.1: bytes=32 time<1ms TTL=128",
+			expectedMs:  1,
+			expectError: false,
+		},
+		{
+			name:        "Windows Russian UTF-8 output",
+			output:      "Ответ от 8.8.8.8: число байт=32 время=14мс TTL=118",
+			expectedMs:  14,
+			expectError: false,
+		},
+		{
+			name:        "Windows Russian UTF-8 under 1ms",
+			output:      "Ответ от 127.0.0.1: число байт=32 время<1мс TTL=128",
+			expectedMs:  1,
+			expectError: false,
+		},
+		{
+			name:        "Windows Russian CP866 raw bytes",
+			output:      "Reply: bytes=32 \xa2\xe0\xa5\xac\xef=14\xac\xe1 TTL=118",
+			expectedMs:  14,
+			expectError: false,
+		},
+		{
+			name:        "Windows Russian CP866 under 1ms",
+			output:      "Reply: bytes=32 \xa2\xe0\xa5\xac\xef<1\xac\xe1 TTL=118",
+			expectedMs:  1,
+			expectError: false,
+		},
+		{
+			name:        "Windows Russian summary",
+			output:      "Приблизительное время приема-передачи в мс:\n    Минимальное = 14мсек, Максимальное = 15мсек, Среднее = 14мсек",
+			expectedMs:  14,
+			expectError: false,
+		},
+		{
+			name:        "Windows German output",
+			output:      "Antwort von 8.8.8.8: Bytes=32 Zeit=12ms TTL=118",
+			expectedMs:  12,
 			expectError: false,
 		},
 		{
