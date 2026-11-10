@@ -1,0 +1,19 @@
+# Binaries
+netcheck
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Runtime data & logs
+data/*.log
+data/config.json
+data/targets.json
+data/*.tmp
+!data/.gitkeep
