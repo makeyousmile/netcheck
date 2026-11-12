@@ -180,6 +180,12 @@ func (c *Checker) CheckTarget(id string) {
 		// FAILURE
 		errMsg := checkErr.Error()
 		var sendAlert bool
+		var consecutiveCount int
+
+		threshold := cfg.FailedChecksThreshold
+		if threshold <= 0 {
+			threshold = 2
+		}
 
 		_, _ = c.store.Update(id, func(t *Target) {
 			t.LastCheck = &now
@@ -188,19 +194,20 @@ func (c *Checker) CheckTarget(id string) {
 			t.LastError = errMsg
 			t.ConsecutiveFailures++
 			t.LastFailure = &now
+			consecutiveCount = t.ConsecutiveFailures
 
-			// Condition: "если соединение работало а потом перестало - отправляет сообщение в телеграмм"
+			// Condition: "если 2 проверки подряд были неудачны (после того как работало) - отправляет сообщение в телеграмм"
 			// WasUp indicates it worked before, and AlertSent ensures we only alert once per outage
-			if t.WasUp && !t.AlertSent {
+			if t.WasUp && !t.AlertSent && t.ConsecutiveFailures >= threshold {
 				sendAlert = true
 				t.AlertSent = true
 			}
 		})
 
-		logger.Error("Target [%s] %s is DOWN (check failed: %s)", target.Name, address, errMsg)
+		logger.Error("Target [%s] %s is DOWN (check failed: %s, failure %d/%d)", target.Name, address, errMsg, consecutiveCount, threshold)
 
 		if sendAlert {
-			logger.Warn("ALERT TRIGGERED: Target [%s] %s was UP and is now DOWN! Sending Telegram notification...", target.Name, address)
+			logger.Warn("ALERT TRIGGERED: Target [%s] %s failed %d consecutive checks! Sending Telegram notification...", target.Name, address, consecutiveCount)
 			if err := c.notifier.SendAlert(target.Name, target.Host, target.Port, errMsg, 0); err != nil {
 				logger.Error("Failed to send Telegram alert for [%s] %s: %v", target.Name, address, err)
 			} else {

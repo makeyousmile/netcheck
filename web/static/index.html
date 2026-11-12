@@ -323,11 +323,19 @@
                   </div>
                 </div>
 
-                <div class="form-check form-switch mb-4">
+                <div class="form-check form-switch mb-3">
                   <input class="form-check-input" type="checkbox" id="tg-notify-recovery" checked>
                   <label class="form-check-label small" for="tg-notify-recovery">
                     Уведомлять также о восстановлении связи (когда сервис снова поднялся в UP)
                   </label>
+                </div>
+
+                <div class="mb-4">
+                  <label class="form-label small fw-semibold">Порог неудачных проверок для отправки алерта</label>
+                  <input type="number" id="failed-checks-threshold" class="form-control bg-dark text-light border-secondary" min="1" max="100" value="2">
+                  <div class="form-text text-secondary">
+                    Сколько проверок подряд должны быть неудачными перед отправкой сообщения в Telegram (по умолчанию: <b>2</b>).
+                  </div>
                 </div>
 
                 <hr class="border-secondary my-4">
@@ -771,6 +779,7 @@
         }
         document.getElementById('tg-chat-id').value = cfg.telegram_chat_id || '';
         document.getElementById('tg-notify-recovery').checked = cfg.notify_recovery;
+        document.getElementById('failed-checks-threshold').value = cfg.failed_checks_threshold || 2;
         document.getElementById('default-interval').value = cfg.default_interval || 15;
         document.getElementById('default-timeout').value = cfg.default_timeout || 5;
 
@@ -793,6 +802,7 @@
         telegram_token: document.getElementById('tg-token').value,
         telegram_chat_id: document.getElementById('tg-chat-id').value,
         notify_recovery: document.getElementById('tg-notify-recovery').checked,
+        failed_checks_threshold: parseInt(document.getElementById('failed-checks-threshold').value, 10) || 2,
         default_interval: parseInt(document.getElementById('default-interval').value, 10),
         default_timeout: parseInt(document.getElementById('default-timeout').value, 10)
       };

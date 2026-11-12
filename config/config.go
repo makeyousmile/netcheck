@@ -8,13 +8,14 @@ import (
 )
 
 type Config struct {
-	WebPort         int    `json:"web_port"`
-	TelegramToken   string `json:"telegram_token"`
-	TelegramChatID  string `json:"telegram_chat_id"`
-	NotifyRecovery  bool   `json:"notify_recovery"`
-	DefaultInterval int    `json:"default_interval"` // in seconds
-	DefaultTimeout  int    `json:"default_timeout"`  // in seconds
-	DataDir         string `json:"data_dir"`
+	WebPort                int    `json:"web_port"`
+	TelegramToken          string `json:"telegram_token"`
+	TelegramChatID         string `json:"telegram_chat_id"`
+	NotifyRecovery         bool   `json:"notify_recovery"`
+	FailedChecksThreshold  int    `json:"failed_checks_threshold"` // consecutive failed checks before Telegram alert
+	DefaultInterval        int    `json:"default_interval"`        // in seconds
+	DefaultTimeout         int    `json:"default_timeout"`         // in seconds
+	DataDir                string `json:"data_dir"`
 }
 
 type Manager struct {
@@ -25,13 +26,14 @@ type Manager struct {
 
 func DefaultConfig() Config {
 	return Config{
-		WebPort:         8088,
-		TelegramToken:   "",
-		TelegramChatID:  "",
-		NotifyRecovery:  true,
-		DefaultInterval: 15,
-		DefaultTimeout:  5,
-		DataDir:         "./data",
+		WebPort:                8088,
+		TelegramToken:          "",
+		TelegramChatID:         "",
+		NotifyRecovery:         true,
+		FailedChecksThreshold:  2,
+		DefaultInterval:        15,
+		DefaultTimeout:         5,
+		DataDir:                "./data",
 	}
 }
 
@@ -89,6 +91,9 @@ func (m *Manager) loadLocked() error {
 	}
 	if c.DefaultTimeout == 0 {
 		c.DefaultTimeout = 5
+	}
+	if c.FailedChecksThreshold <= 0 {
+		c.FailedChecksThreshold = 2
 	}
 	if c.DataDir == "" {
 		c.DataDir = "./data"

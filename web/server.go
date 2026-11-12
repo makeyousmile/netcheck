@@ -320,24 +320,26 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			maskedToken = "******"
 		}
 		resp := map[string]interface{}{
-			"telegram_token_set": cfg.TelegramToken != "",
-			"telegram_token":     cfg.TelegramToken,
-			"telegram_masked":    maskedToken,
-			"telegram_chat_id":   cfg.TelegramChatID,
-			"notify_recovery":    cfg.NotifyRecovery,
-			"default_interval":   cfg.DefaultInterval,
-			"default_timeout":    cfg.DefaultTimeout,
-			"web_port":           cfg.WebPort,
+			"telegram_token_set":      cfg.TelegramToken != "",
+			"telegram_token":          cfg.TelegramToken,
+			"telegram_masked":         maskedToken,
+			"telegram_chat_id":        cfg.TelegramChatID,
+			"notify_recovery":         cfg.NotifyRecovery,
+			"failed_checks_threshold": cfg.FailedChecksThreshold,
+			"default_interval":        cfg.DefaultInterval,
+			"default_timeout":         cfg.DefaultTimeout,
+			"web_port":                cfg.WebPort,
 		}
 		jsonResponse(w, http.StatusOK, resp)
 
 	case http.MethodPost:
 		var req struct {
-			TelegramToken   string `json:"telegram_token"`
-			TelegramChatID  string `json:"telegram_chat_id"`
-			NotifyRecovery  *bool  `json:"notify_recovery"`
-			DefaultInterval int    `json:"default_interval"`
-			DefaultTimeout  int    `json:"default_timeout"`
+			TelegramToken          string `json:"telegram_token"`
+			TelegramChatID         string `json:"telegram_chat_id"`
+			NotifyRecovery         *bool  `json:"notify_recovery"`
+			FailedChecksThreshold  int    `json:"failed_checks_threshold"`
+			DefaultInterval        int    `json:"default_interval"`
+			DefaultTimeout         int    `json:"default_timeout"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonError(w, http.StatusBadRequest, "Invalid JSON body")
@@ -351,6 +353,9 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			c.TelegramChatID = strings.TrimSpace(req.TelegramChatID)
 			if req.NotifyRecovery != nil {
 				c.NotifyRecovery = *req.NotifyRecovery
+			}
+			if req.FailedChecksThreshold > 0 {
+				c.FailedChecksThreshold = req.FailedChecksThreshold
 			}
 			if req.DefaultInterval > 0 {
 				c.DefaultInterval = req.DefaultInterval

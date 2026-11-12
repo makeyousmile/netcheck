@@ -117,22 +117,38 @@ func TestCheckerTransitionAndTelegramAlert(t *testing.T) {
 	_ = ln.Close()
 	time.Sleep(50 * time.Millisecond)
 
-	// 4. Perform check again
+	// 4. First failure: should NOT trigger alert yet (threshold = 2)
 	checker.CheckTarget(target.ID)
 
 	updated, ok = store.Get(target.ID)
 	if !ok || updated.Status != "DOWN" {
 		t.Fatalf("Expected target status DOWN, got %v", updated.Status)
 	}
+	if updated.ConsecutiveFailures != 1 {
+		t.Fatalf("Expected ConsecutiveFailures to be 1, got %d", updated.ConsecutiveFailures)
+	}
 
-	// The alert must have triggered!
 	mockNotif.mu.Lock()
-	if mockNotif.alertCount != 1 {
-		t.Fatalf("Expected exactly 1 alert, got %d", mockNotif.alertCount)
+	if mockNotif.alertCount != 0 {
+		t.Fatalf("Expected 0 alerts after 1st failure, got %d", mockNotif.alertCount)
 	}
 	mockNotif.mu.Unlock()
 
-	// 5. Check again while still DOWN — it should NOT repeat alert spam
+	// 5. Second consecutive failure: now alert MUST trigger!
+	checker.CheckTarget(target.ID)
+
+	updated, _ = store.Get(target.ID)
+	if updated.ConsecutiveFailures != 2 {
+		t.Fatalf("Expected ConsecutiveFailures to be 2, got %d", updated.ConsecutiveFailures)
+	}
+
+	mockNotif.mu.Lock()
+	if mockNotif.alertCount != 1 {
+		t.Fatalf("Expected exactly 1 alert after 2nd consecutive failure, got %d", mockNotif.alertCount)
+	}
+	mockNotif.mu.Unlock()
+
+	// 6. Third failure while still DOWN: should NOT repeat alert spam
 	checker.CheckTarget(target.ID)
 	mockNotif.mu.Lock()
 	if mockNotif.alertCount != 1 {
@@ -140,7 +156,7 @@ func TestCheckerTransitionAndTelegramAlert(t *testing.T) {
 	}
 	mockNotif.mu.Unlock()
 
-	// 6. Restart TCP server on the SAME port
+	// 7. Restart TCP server on the SAME port
 	ln2, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", tcpPort))
 	if err != nil {
 		t.Skipf("Port %d busy or could not re-listen: %v", tcpPort, err)
